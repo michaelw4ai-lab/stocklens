@@ -6,14 +6,13 @@ from data import get_dashboard_data, get_price_history, get_top10_analysis, refr
 
 app = Flask(__name__)
 
-# Prefetch data on startup
+# Prefetch data in background on startup
 threading.Thread(target=get_dashboard_data, daemon=True).start()
 
 
 @app.route("/")
 def index():
-    data = get_dashboard_data()
-    return render_template("index.html", data=data)
+    return render_template("index.html")
 
 
 @app.route("/api/stocks")
