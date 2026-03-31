@@ -21,9 +21,15 @@
             <a href="/analysis" class="btn btn-warning btn-sm me-2">
                 <i class="bi bi-bar-chart-line"></i> Top 10 Analysis
             </a>
-            <button id="refreshBtn" class="btn btn-outline-light btn-sm">
+            <button id="refreshBtn" class="btn btn-outline-light btn-sm me-2">
                 <i class="bi bi-arrow-clockwise"></i> Refresh
             </button>
+            {% if user %}
+            <span class="text-white-50 me-2 small"><i class="bi bi-person-circle"></i> {{ user }}</span>
+            <a href="/logout" class="btn btn-outline-light btn-sm"><i class="bi bi-box-arrow-right"></i></a>
+            {% else %}
+            <a href="/login" class="btn btn-outline-light btn-sm"><i class="bi bi-box-arrow-in-right"></i> Login</a>
+            {% endif %}
         </div>
     </nav>
 

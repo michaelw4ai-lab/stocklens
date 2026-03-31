@@ -128,13 +128,19 @@
             </a>
             <span class="text-white-50 ms-2">Top 10 Deep Analysis</span>
         </div>
-        <div>
+        <div class="d-flex align-items-center">
             <a href="/" class="btn btn-outline-light btn-sm me-2">
                 <i class="bi bi-speedometer2"></i> Dashboard
             </a>
-            <button id="refreshTop10Btn" class="btn btn-warning btn-sm" onclick="refreshTop10()">
+            <button id="refreshTop10Btn" class="btn btn-warning btn-sm me-2" onclick="refreshTop10()">
                 <i class="bi bi-arrow-clockwise"></i> Refresh
             </button>
+            {% if user %}
+            <span class="text-white-50 me-2 small"><i class="bi bi-person-circle"></i> {{ user }}</span>
+            <a href="/logout" class="btn btn-outline-light btn-sm"><i class="bi bi-box-arrow-right"></i></a>
+            {% else %}
+            <a href="/login" class="btn btn-outline-light btn-sm"><i class="bi bi-box-arrow-in-right"></i> Login</a>
+            {% endif %}
         </div>
     </nav>
 
@@ -196,6 +202,10 @@
 
             try {
                 const res = await fetch("/api/refresh-top10", { method: "POST" });
+                if (res.status === 401) {
+                    window.location.href = "/login?next=" + encodeURIComponent(window.location.pathname);
+                    return;
+                }
                 const stocks = await res.json();
                 document.getElementById("loadingScreen").style.display = "none";
                 document.getElementById("analysisContent").style.display = "block";

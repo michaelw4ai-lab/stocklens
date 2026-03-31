@@ -235,6 +235,10 @@ async function refreshData() {
 
     try {
         const res = await fetch("/api/refresh", { method: "POST" });
+        if (res.status === 401) {
+            window.location.href = "/login?next=" + encodeURIComponent(window.location.pathname);
+            return;
+        }
         const data = await res.json();
 
         if (loadingScreen) loadingScreen.style.display = "none";
