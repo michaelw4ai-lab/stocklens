@@ -1,16 +1,27 @@
+import os
 import secrets
 from functools import wraps
 
+from authlib.integrations.flask_client import OAuth
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 
-from auth import register, authenticate
 from data import (
     get_dashboard_data, get_price_history, get_top10_analysis,
     refresh_dashboard, refresh_top10, refresh_cache,
 )
 
 app = Flask(__name__)
-app.secret_key = secrets.token_hex(32)
+app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+
+# Google OAuth setup
+oauth = OAuth(app)
+oauth.register(
+    name="google",
+    client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+    client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
+)
 
 
 def login_required_api(f):
@@ -32,38 +43,29 @@ def analysis():
     return render_template("analysis.html", user=session.get("user"))
 
 
-@app.route("/login", methods=["GET", "POST"])
+@app.route("/login")
 def login():
-    if request.method == "POST":
-        username = request.form.get("username", "")
-        password = request.form.get("password", "")
-        if authenticate(username, password):
-            session["user"] = username.strip().lower()
-            next_url = request.args.get("next", "/")
-            return redirect(next_url)
-        return render_template("login.html", error="Invalid username or password.", username=username)
-    return render_template("login.html")
+    next_url = request.args.get("next", "/")
+    session["login_next"] = next_url
+    redirect_uri = url_for("auth_callback", _external=True)
+    return oauth.google.authorize_redirect(redirect_uri)
 
 
-@app.route("/register", methods=["GET", "POST"])
-def register_page():
-    if request.method == "POST":
-        username = request.form.get("username", "")
-        password = request.form.get("password", "")
-        confirm = request.form.get("confirm", "")
-        if password != confirm:
-            return render_template("register.html", error="Passwords do not match.", username=username)
-        ok, msg = register(username, password)
-        if ok:
-            session["user"] = username.strip().lower()
-            return redirect("/")
-        return render_template("register.html", error=msg, username=username)
-    return render_template("register.html")
+@app.route("/auth/callback")
+def auth_callback():
+    token = oauth.google.authorize_access_token()
+    userinfo = token.get("userinfo")
+    if userinfo:
+        session["user"] = userinfo.get("email", userinfo.get("name", "User"))
+        session["user_name"] = userinfo.get("name", "")
+        session["user_picture"] = userinfo.get("picture", "")
+    next_url = session.pop("login_next", "/")
+    return redirect(next_url)
 
 
 @app.route("/logout")
 def logout():
-    session.pop("user", None)
+    session.clear()
     return redirect("/")
 
 

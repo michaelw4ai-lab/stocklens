@@ -136,10 +136,13 @@
                 <i class="bi bi-arrow-clockwise"></i> Refresh
             </button>
             {% if user %}
-            <span class="text-white-50 me-2 small"><i class="bi bi-person-circle"></i> {{ user }}</span>
+            {% if session.get('user_picture') %}
+            <img src="{{ session['user_picture'] }}" alt="" style="width:24px;height:24px;border-radius:50%;margin-right:6px">
+            {% endif %}
+            <span class="text-white-50 me-2 small">{{ session.get('user_name') or user }}</span>
             <a href="/logout" class="btn btn-outline-light btn-sm"><i class="bi bi-box-arrow-right"></i></a>
             {% else %}
-            <a href="/login" class="btn btn-outline-light btn-sm"><i class="bi bi-box-arrow-in-right"></i> Login</a>
+            <a href="/login" class="btn btn-outline-light btn-sm"><i class="bi bi-google me-1"></i> Sign in</a>
             {% endif %}
         </div>
     </nav>
