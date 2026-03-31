@@ -4,6 +4,7 @@ import math
 import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 import numpy as np
@@ -57,43 +58,53 @@ def get_sp500_tickers():
     return df
 
 
+BATCH_SIZE = 100
+
+
+def _download_batch(tickers_batch):
+    """Download a batch of tickers and return a dict of {symbol: (price, change, change_pct)}."""
+    results = {}
+    try:
+        data = yf.download(tickers_batch, period="2d", group_by="ticker", threads=True, progress=False)
+        for symbol in tickers_batch:
+            try:
+                ticker_data = data[symbol] if len(tickers_batch) > 1 else data
+                closes = ticker_data["Close"].dropna()
+                if len(closes) >= 2:
+                    price = round(float(closes.iloc[-1]), 2)
+                    prev = float(closes.iloc[-2])
+                    change = round(price - prev, 2)
+                    change_pct = round((change / prev) * 100, 2)
+                elif len(closes) == 1:
+                    price = round(float(closes.iloc[-1]), 2)
+                    change = 0.0
+                    change_pct = 0.0
+                else:
+                    price, change, change_pct = None, None, None
+                results[symbol] = (price, change, change_pct)
+            except Exception:
+                results[symbol] = (None, None, None)
+    except Exception:
+        for symbol in tickers_batch:
+            results[symbol] = (None, None, None)
+    return results
+
+
 def _fetch_stock_data():
     sp500 = get_sp500_tickers()
     tickers = sp500["Symbol"].tolist()
 
-    try:
-        data = yf.download(tickers, period="5d", group_by="ticker", threads=True)
-    except Exception:
-        data = pd.DataFrame()
+    # Download in batches (yfinance handles threading internally per batch)
+    batches = [tickers[i:i + BATCH_SIZE] for i in range(0, len(tickers), BATCH_SIZE)]
+    price_map = {}
+
+    for batch in batches:
+        price_map.update(_download_batch(batch))
 
     results = []
     for _, row in sp500.iterrows():
         symbol = row["Symbol"]
-        try:
-            if len(tickers) == 1:
-                ticker_data = data
-            else:
-                ticker_data = data[symbol]
-
-            closes = ticker_data["Close"].dropna()
-            if len(closes) >= 2:
-                price = round(float(closes.iloc[-1]), 2)
-                prev = float(closes.iloc[-2])
-                change = round(price - prev, 2)
-                change_pct = round((change / prev) * 100, 2)
-            elif len(closes) == 1:
-                price = round(float(closes.iloc[-1]), 2)
-                change = 0.0
-                change_pct = 0.0
-            else:
-                price = None
-                change = None
-                change_pct = None
-        except Exception:
-            price = None
-            change = None
-            change_pct = None
-
+        price, change, change_pct = price_map.get(symbol, (None, None, None))
         results.append({
             "symbol": symbol,
             "name": row["Security"],
