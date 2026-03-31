@@ -1,0 +1,102 @@
+body {
+    background-color: #f8f9fa;
+}
+
+.navbar {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+.summary-card {
+    border: none;
+    border-radius: 12px;
+    transition: transform 0.2s;
+}
+
+.summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.card-total { border-left: 4px solid #4361ee; }
+.card-gainers { border-left: 4px solid #2ec4b6; }
+.card-losers { border-left: 4px solid #e71d36; }
+.card-sectors { border-left: 4px solid #ff9f1c; }
+
+.card-icon {
+    font-size: 2rem;
+    opacity: 0.3;
+}
+
+.card-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+}
+
+.text-gain { color: #2ec4b6; }
+.text-loss { color: #e71d36; }
+
+#stockTable {
+    font-size: 0.9rem;
+}
+
+#stockTable thead th {
+    position: sticky;
+    top: 0;
+    background: #1a1a2e;
+    color: #fff;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    z-index: 1;
+}
+
+#stockTable thead th:hover {
+    background: #16213e;
+}
+
+#stockTable tbody tr {
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+#stockTable tbody tr:hover {
+    background-color: #e8edff;
+}
+
+.table-container {
+    max-height: 600px;
+    overflow-y: auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+.chart-container {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+.sort-arrow {
+    margin-left: 4px;
+    font-size: 0.7rem;
+}
+
+.badge-sector {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+}
+
+.search-box {
+    max-width: 400px;
+}
+
+.loading-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
