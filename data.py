@@ -1,5 +1,7 @@
 import io
+import json
 import math
+import os
 import threading
 import time
 from datetime import datetime
@@ -11,14 +13,34 @@ import yfinance as yf
 
 _cache = {}
 _lock = threading.Lock()
+_fetch_lock = threading.Lock()
 
-SP500_TTL = 86400  # 24 hours
-STOCK_TTL = 900    # 15 minutes
+CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+DASHBOARD_CACHE = os.path.join(CACHE_DIR, "dashboard.json")
+TOP10_CACHE = os.path.join(CACHE_DIR, "top10.json")
+
+
+def _load_local_cache(path):
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def _save_local_cache(path, data):
+    try:
+        with open(path, "w") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
 
 
 def get_sp500_tickers():
     with _lock:
-        if "sp500" in _cache and time.time() - _cache["sp500_time"] < SP500_TTL:
+        if "sp500" in _cache:
             return _cache["sp500"]
 
     url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
@@ -28,24 +50,17 @@ def get_sp500_tickers():
     tables = pd.read_html(io.StringIO(resp.text))
     df = tables[0]
     df = df[["Symbol", "Security", "GICS Sector", "GICS Sub-Industry"]]
-    # yfinance uses hyphens instead of dots
     df["Symbol"] = df["Symbol"].str.replace(".", "-", regex=False)
 
     with _lock:
         _cache["sp500"] = df
-        _cache["sp500_time"] = time.time()
     return df
 
 
-def get_stock_data():
-    with _lock:
-        if "stocks" in _cache and time.time() - _cache["stocks_time"] < STOCK_TTL:
-            return _cache["stocks"]
-
+def _fetch_stock_data():
     sp500 = get_sp500_tickers()
     tickers = sp500["Symbol"].tolist()
 
-    # Bulk download - 5 days is enough for current price + daily change
     try:
         data = yf.download(tickers, period="5d", group_by="ticker", threads=True)
     except Exception:
@@ -88,17 +103,10 @@ def get_stock_data():
             "change": change,
             "change_pct": change_pct,
         })
-
-    with _lock:
-        _cache["stocks"] = results
-        _cache["stocks_time"] = time.time()
     return results
 
 
-def get_dashboard_data():
-    stocks = get_stock_data()
-
-    # Sector stats
+def _build_dashboard(stocks):
     sectors = {}
     for s in stocks:
         sec = s["sector"]
@@ -125,6 +133,40 @@ def get_dashboard_data():
         "losers": losers,
         "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
+
+
+def get_dashboard_data():
+    """Return cached dashboard data from local file. Never fetches live."""
+    with _lock:
+        if "dashboard" in _cache:
+            return _cache["dashboard"]
+
+    data = _load_local_cache(DASHBOARD_CACHE)
+    if data:
+        with _lock:
+            _cache["dashboard"] = data
+        return data
+
+    # No local cache exists at all - return empty state
+    return {
+        "stocks": [],
+        "sectors": [],
+        "total": 0,
+        "gainers": 0,
+        "losers": 0,
+        "last_updated": "Never - click Refresh to load data",
+    }
+
+
+def refresh_dashboard():
+    """Fetch fresh data from Yahoo Finance and save to local cache."""
+    with _fetch_lock:
+        stocks = _fetch_stock_data()
+        data = _build_dashboard(stocks)
+        _save_local_cache(DASHBOARD_CACHE, data)
+        with _lock:
+            _cache["dashboard"] = data
+        return data
 
 
 def get_price_history(symbol):
@@ -171,7 +213,6 @@ def _predict_trend(rsi, macd, macd_signal, sma20, sma50, price):
     score = 0
     reasons = []
 
-    # RSI signals
     if rsi < 30:
         score += 2
         reasons.append("RSI oversold (<30) - bullish reversal likely")
@@ -187,7 +228,6 @@ def _predict_trend(rsi, macd, macd_signal, sma20, sma50, price):
     else:
         reasons.append("RSI neutral zone")
 
-    # MACD signals
     if macd > macd_signal:
         score += 1
         reasons.append("MACD above signal line - bullish momentum")
@@ -195,7 +235,6 @@ def _predict_trend(rsi, macd, macd_signal, sma20, sma50, price):
         score -= 1
         reasons.append("MACD below signal line - bearish momentum")
 
-    # Moving average signals
     if price > sma20:
         score += 1
         reasons.append("Price above 20-day SMA - short-term uptrend")
@@ -210,7 +249,6 @@ def _predict_trend(rsi, macd, macd_signal, sma20, sma50, price):
         score -= 1
         reasons.append("Price below 50-day SMA - medium-term downtrend")
 
-    # Golden/Death cross
     if sma20 > sma50:
         score += 1
         reasons.append("20-day SMA > 50-day SMA - bullish crossover")
@@ -232,13 +270,7 @@ def _predict_trend(rsi, macd, macd_signal, sma20, sma50, price):
     return {"outlook": outlook, "score": score, "reasons": reasons}
 
 
-def get_top10_analysis():
-    cache_key = "top10_analysis"
-    with _lock:
-        if cache_key in _cache and time.time() - _cache[cache_key + "_time"] < STOCK_TTL:
-            return _cache[cache_key]
-
-    # Get top 10 by market cap
+def _fetch_top10():
     top10_symbols = [
         "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL",
         "META", "BRK-B", "LLY", "AVGO", "TSM"
@@ -247,7 +279,6 @@ def get_top10_analysis():
     sp500 = get_sp500_tickers()
     sp500_dict = {row["Symbol"]: row for _, row in sp500.iterrows()}
 
-    # Override: use actual S&P 500 top by fetching market caps
     try:
         info_list = []
         for sym in top10_symbols:
@@ -268,7 +299,6 @@ def get_top10_analysis():
             ticker = yf.Ticker(symbol)
             info = ticker.info
 
-            # Price history (3 months for technical analysis)
             hist = ticker.history(period="3mo")
             if hist.empty:
                 continue
@@ -277,16 +307,13 @@ def get_top10_analysis():
             dates = [d.strftime("%Y-%m-%d") for d in hist.index]
             price = round(float(closes[-1]), 2)
 
-            # Technical indicators
             sma20 = round(float(np.mean(closes[-20:])), 2) if len(closes) >= 20 else price
             sma50 = round(float(np.mean(closes[-50:])), 2) if len(closes) >= 50 else price
             rsi = _compute_rsi(closes) if len(closes) > 14 else 50.0
             macd, macd_signal = _compute_macd(closes) if len(closes) > 26 else (0, 0)
 
-            # Trend prediction
             prediction = _predict_trend(rsi, macd, macd_signal, sma20, sma50, price)
 
-            # Analyst targets
             try:
                 targets = ticker.analyst_price_targets
                 analyst_data = {
@@ -299,7 +326,6 @@ def get_top10_analysis():
             except Exception:
                 analyst_data = None
 
-            # Recommendations
             try:
                 recs = ticker.recommendations
                 if recs is not None and not recs.empty:
@@ -316,7 +342,6 @@ def get_top10_analysis():
             except Exception:
                 rec_data = None
 
-            # News
             try:
                 news_raw = ticker.news
                 news = []
@@ -332,7 +357,6 @@ def get_top10_analysis():
             except Exception:
                 news = []
 
-            # Key financials
             market_cap = info.get("marketCap", 0)
             if market_cap >= 1e12:
                 market_cap_str = f"${market_cap/1e12:.2f}T"
@@ -375,13 +399,35 @@ def get_top10_analysis():
                 "news": news,
                 "financials": financials,
             })
-        except Exception as e:
+        except Exception:
             continue
 
-    with _lock:
-        _cache[cache_key] = results
-        _cache[cache_key + "_time"] = time.time()
     return results
+
+
+def get_top10_analysis():
+    """Return cached top10 data from local file. Never fetches live."""
+    with _lock:
+        if "top10" in _cache:
+            return _cache["top10"]
+
+    data = _load_local_cache(TOP10_CACHE)
+    if data:
+        with _lock:
+            _cache["top10"] = data
+        return data
+
+    return []
+
+
+def refresh_top10():
+    """Fetch fresh top10 analysis and save to local cache."""
+    with _fetch_lock:
+        data = _fetch_top10()
+        _save_local_cache(TOP10_CACHE, data)
+        with _lock:
+            _cache["top10"] = data
+        return data
 
 
 def refresh_cache():

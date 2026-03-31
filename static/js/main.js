@@ -221,11 +221,25 @@ async function showDetail(symbol, name) {
 async function refreshData() {
     const btn = document.getElementById("refreshBtn");
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Refreshing...';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Refreshing (30-60s)...';
+
+    // Show dashboard area if it was hidden (first load)
+    const loadingScreen = document.getElementById("loadingScreen");
+    if (loadingScreen) {
+        loadingScreen.innerHTML = '<div class="spinner-border text-primary mb-3" style="width:3rem;height:3rem"></div>'
+            + '<h5>Fetching S&P 500 Data...</h5>'
+            + '<p class="text-muted">Downloading from Yahoo Finance. This takes 30-60 seconds.</p>';
+        loadingScreen.style.display = "block";
+        loadingScreen.className = "text-center py-5";
+    }
 
     try {
         const res = await fetch("/api/refresh", { method: "POST" });
         const data = await res.json();
+
+        if (loadingScreen) loadingScreen.style.display = "none";
+        document.getElementById("dashboardContent").style.display = "block";
+
         allStocks = data.stocks;
         renderSummary(data);
         renderSectorChart(data.sectors);
@@ -233,7 +247,13 @@ async function refreshData() {
         filterAndRender();
         document.getElementById("lastUpdated").textContent = data.last_updated;
     } catch (e) {
-        alert("Refresh failed. Please try again.");
+        if (loadingScreen) {
+            loadingScreen.innerHTML = '<div class="text-danger"><i class="bi bi-exclamation-triangle" style="font-size:2rem"></i>'
+                + '<h5 class="mt-2">Refresh failed</h5><p>' + e.message + '</p>'
+                + '<button class="btn btn-primary btn-sm" onclick="refreshData()">Retry</button></div>';
+        } else {
+            alert("Refresh failed. Please try again.");
+        }
     }
 
     btn.disabled = false;

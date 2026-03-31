@@ -1,13 +1,11 @@
-import threading
-
 from flask import Flask, render_template, jsonify
 
-from data import get_dashboard_data, get_price_history, get_top10_analysis, refresh_cache
+from data import (
+    get_dashboard_data, get_price_history, get_top10_analysis,
+    refresh_dashboard, refresh_top10, refresh_cache,
+)
 
 app = Flask(__name__)
-
-# Prefetch data in background on startup
-threading.Thread(target=get_dashboard_data, daemon=True).start()
 
 
 @app.route("/")
@@ -41,7 +39,14 @@ def api_top10():
 @app.route("/api/refresh", methods=["POST"])
 def api_refresh():
     refresh_cache()
-    data = get_dashboard_data()
+    data = refresh_dashboard()
+    return jsonify(data)
+
+
+@app.route("/api/refresh-top10", methods=["POST"])
+def api_refresh_top10():
+    refresh_cache()
+    data = refresh_top10()
     return jsonify(data)
 
 

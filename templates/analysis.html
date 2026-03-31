@@ -132,6 +132,9 @@
             <a href="/" class="btn btn-outline-light btn-sm me-2">
                 <i class="bi bi-speedometer2"></i> Dashboard
             </a>
+            <button id="refreshTop10Btn" class="btn btn-warning btn-sm" onclick="refreshTop10()">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
         </div>
     </nav>
 
@@ -162,6 +165,14 @@
             try {
                 const res = await fetch("/api/top10");
                 const stocks = await res.json();
+                if (!stocks || stocks.length === 0) {
+                    document.getElementById("loadingScreen").innerHTML =
+                        '<div class="text-center"><i class="bi bi-database" style="font-size:3rem;color:#ccc"></i>'
+                        + '<h5 class="mt-3">No Cached Data</h5>'
+                        + '<p class="text-muted">Click Refresh to fetch Top 10 analysis from Yahoo Finance.<br>This will take 60-90 seconds.</p>'
+                        + '<button class="btn btn-warning" onclick="refreshTop10()"><i class="bi bi-arrow-clockwise"></i> Refresh Now</button></div>';
+                    return;
+                }
                 document.getElementById("loadingScreen").style.display = "none";
                 document.getElementById("analysisContent").style.display = "block";
                 renderStocks(stocks);
@@ -169,6 +180,36 @@
                 document.getElementById("loadingScreen").innerHTML =
                     '<div class="text-danger"><i class="bi bi-exclamation-triangle" style="font-size:2rem"></i><h5 class="mt-2">Failed to load analysis</h5><p>' + e.message + '</p></div>';
             }
+        }
+
+        async function refreshTop10() {
+            const btn = document.getElementById("refreshTop10Btn");
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Refreshing...';
+
+            document.getElementById("loadingScreen").innerHTML =
+                '<div class="spinner-border text-primary mb-3" style="width:3rem;height:3rem"></div>'
+                + '<h5>Fetching Top 10 Analysis...</h5>'
+                + '<p class="text-muted">Downloading data, news, analyst targets. This takes 60-90 seconds.</p>';
+            document.getElementById("loadingScreen").style.display = "flex";
+            document.getElementById("analysisContent").style.display = "none";
+
+            try {
+                const res = await fetch("/api/refresh-top10", { method: "POST" });
+                const stocks = await res.json();
+                document.getElementById("loadingScreen").style.display = "none";
+                document.getElementById("analysisContent").style.display = "block";
+                document.getElementById("stockCards").innerHTML = "";
+                renderStocks(stocks);
+            } catch (e) {
+                document.getElementById("loadingScreen").innerHTML =
+                    '<div class="text-danger"><i class="bi bi-exclamation-triangle" style="font-size:2rem"></i>'
+                    + '<h5 class="mt-2">Refresh failed</h5><p>' + e.message + '</p>'
+                    + '<button class="btn btn-warning" onclick="refreshTop10()">Retry</button></div>';
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Refresh';
         }
 
         function outlookClass(outlook) {
